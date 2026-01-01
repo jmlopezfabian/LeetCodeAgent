@@ -1,5 +1,4 @@
 
-from dataclasses import FrozenInstanceError
 from sqlalchemy import Column, Integer, Text, create_engine, Float, ForeignKey
 from sqlalchemy.orm import declarative_base, sessionmaker
 from pgvector.sqlalchemy import Vector
@@ -10,7 +9,6 @@ import pandas as pd
 load_dotenv()
 
 DATABASE_URL = f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@localhost:5432/{os.getenv('POSTGRES_DB')}"
-print(DATABASE_URL)
 df = pd.read_csv('data/leetcode_raw.csv')
 
 Base = declarative_base()
@@ -38,20 +36,43 @@ Base.metadata.create_all(bind=engine)
 Session = sessionmaker(bind=engine)
 session = Session()
 
+def prepare_row(row):
+    def parse_number(value):
+        """Cast values like '4.1M' or '2.5K' to integers"""
+        if pd.isna(value):
+            return None
+        if isinstance(value, (int, float)):
+            return int(value)
+        value_str = str(value).strip()
+        if value_str.endswith("M"):
+            return int(float(value_str[:-1]) * 1000000)
+        elif value_str.endswith("K"):
+            return int(float(value_str[:-1]) * 1000)
+        else:
+            try:
+                return int(float(value_str))
+            except (ValueError, TypeError):
+                return None
+    
+    accepted = parse_number(row['accepted'])
+    submissions = parse_number(row['submissions'])
+    
+    return {
+        "title": row['title'],
+        "description": row['description'],
+        "difficulty": row['difficulty'],
+        "acceptance_rate": row['acceptance_rate'],
+        "frequency": row['frequency'],
+        "url": row['url'],
+        "accepted": accepted,
+        "submissions": submissions,
+        "likes": row['likes'],
+        "dislikes": row['dislikes'],
+        "rating": row['rating'],
+    }
+
 for index, row in df.iterrows():
-    problem_info = ProblemInformation(
-        title=row['title'],
-        description=row['description'],
-        difficulty=row['difficulty'],
-        acceptance_rate=row['acceptance_rate'],
-        frequency=row['frequency'],
-        url=row['url'],
-        accepted=row['accepted'],
-        submissions=row['submissions'],
-        likes=row['likes'],
-        dislikes=row['dislikes'],
-        rating=row['rating'],
-    )
+    problem_info = ProblemInformation(**prepare_row(row))
     session.add(problem_info)
     session.commit()
 
